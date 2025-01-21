@@ -5,12 +5,14 @@ from builtins import range  # pylint: disable=redefined-builtin
 from future import standard_library
 standard_library.install_aliases()
 import urllib.request, urllib.parse, urllib.error
-import dash_html_components as html
-import dash_table_experiments as dt
+# import dash_html_components as html
+from dash import html, dcc
+from dash import dash_table
+# import dash_table_experiments as dt
 import base64
 import io
 import pandas as pd
-import numpy as np\
+import numpy as np
 
 
 '''

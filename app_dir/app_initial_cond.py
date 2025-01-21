@@ -271,8 +271,8 @@ layout = html.Div(
 for i in range(NVARS_MAX):
 
     @app.callback(
-        dash.dependencies.Output(var_ids[i] + "_tr", 'style'),
-        [dash.dependencies.Input('inp_nvars', 'value')])
+        Output(var_ids[i] + "_tr", 'style'),
+        [nput('inp_nvars', 'value')])
     def toggle_visibility(nvars, i=i):
         """Callback for setting variable visibility"""
         style = {}
@@ -302,11 +302,11 @@ states += [State('inp_hitwell', 'value')]
 
 
 @app.callback(
-    dash.dependencies.Output('compute_info', 'children'),
-    [dash.dependencies.Input('table', 'data'),
-     dash.dependencies.Input('btn_compute', 'n_clicks_timestamp'), 
-     dash.dependencies.Input('btn_compute_2', 'n_clicks_timestamp'),
-     ], states)
+    Output('compute_info', 'children'),
+    [Input('table', 'data'),
+     Input('btn_compute', 'n_clicks_timestamp'), 
+     Input('btn_compute_2', 'n_clicks_timestamp'),
+    ], states)
 
 def on_compute(submit_info, btn_compute, btn_compute_2, *args):
     """Callback for clicking compute button"""

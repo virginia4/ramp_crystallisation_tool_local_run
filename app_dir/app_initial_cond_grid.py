@@ -10,8 +10,9 @@ import xlsxwriter
 from xlsxwriter.utility import xl_rowcol_to_cell
 import xlrd   
 import dash
-import dash_core_components as dcc
-import dash_html_components as html
+# import dash_core_components as dcc
+# import dash_html_components as html
+from dash import html, dcc
 from dash.dependencies import Input, Output, State
 #import dash_table_experiments as dt
 from .common import generate_table
@@ -186,15 +187,15 @@ names = list(fnameDict.keys())
 nestedOptions = fnameDict[names[0]]
 
 @app.callback(
-    dash.dependencies.Output('opt-dropdown', 'options'),
-    [dash.dependencies.Input('name-dropdown', 'value')]
+    Output('opt-dropdown', 'options'),
+    [Input('name-dropdown', 'value')]
 )
 def update_date_dropdown(name):
     return [{'label': i, 'value': i} for i in fnameDict[name]]
 
 @app.callback(
-    dash.dependencies.Output('display-selected-values', 'children'),
-    [dash.dependencies.Input('opt-dropdown', 'value')])
+    Output('display-selected-values', 'children'),
+    [Input('opt-dropdown', 'value')])
 def set_display_children(selected_value):
     return 'you have selected {} option'.format(selected_value)
 
@@ -204,105 +205,206 @@ def set_display_children(selected_value):
 states = [State('inp_code_grid', 'value')]
 states += [State('inp_hitwell_grid', 'value')]
 
-
 @app.callback(
     [Output('submit_info_grid', 'children'),
-     Output('inp_nvars_grid', 'value')], 
+     Output('inp_nvars_grid', 'value')],
     [Input('submit-button_grid', 'n_clicks')],
-    states)
+    states
+)
 def update_output_code_hitwell(n_clicks, *args):
+    # Default output when waiting for user input
+    if n_clicks is None or n_clicks <= 0:
+        return [
+            html.Tr([
+                html.Td(dcc.Textarea(
+                    placeholder=' ',
+                    value='Awaiting input...',
+                    style={'width': '50%'}
+                ))
+            ]), 0
+        ]
+
     hitwell = args[-1]
-    code_name = args[-2]
+    code_name = args[-2] + "*"
+    file_list = sorted([file for file in os.listdir(myPath) if fnmatch.fnmatch(file, code_name)])
 
+    if not file_list:
+        return [
+            html.Tr([
+                html.Td(dcc.Textarea(
+                    placeholder=' ',
+                    value='No matching file found. Please check the inputs.',
+                    style={'width': '50%'}
+                ))
+            ]), 0
+        ]
 
-    code_name = code_name + "*"
-    counter = 0
-    file_list = []
-    for file in os.listdir(myPath):
-        if fnmatch.fnmatch(file, code_name):
-            file_list.append(file)
-    file_list.sort()
-    print(file_list)
-    if len(file_list) > 1:
-        file_found = file_list[0]
-    elif len(file_list) == 1:
-        file_found = file_list[0]
-    print ("The file you called is: \n", file_found)
+    file_found = file_list[0]
     newpath = os.path.join(myPath, file_found)
-    xls = pd.ExcelFile(newpath)
-    df1 = pd.read_excel(xls)
-    print("hitwell type: ", type(hitwell))
-    searchedValue = hitwell
-    print("searchedValue type: ", type(searchedValue))
-    tube = df1.filter(like='Tube').columns
-    print("tube:", tube)
-    well = df1.filter(like='Well').columns
 
-    if well.empty == True: 
-        print('tube and tube number:', searchedValue)
-        # df_searchedValue = df1[df1["Tube #"] == searchedValue]
-        try:
-            df_searchedValue = df1[df1["Tube #"] == int(searchedValue)]
-            print("df_searchedValue \n", df_searchedValue)
-        except:
-            print("Something went wrong, try something new")
-            df_searchedValue = df1[df1["Tube #"] == searchedValue]
-            print("df_searchedValue \n", df_searchedValue)
+    try:
+        xls = pd.ExcelFile(newpath)
+        df1 = pd.read_excel(xls)
+    except Exception as e:
+        return [
+            html.Tr([
+                html.Td(dcc.Textarea(
+                    placeholder=' ',
+                    value=f'Error reading file: {str(e)}. Please report this issue.',
+                    style={'width': '50%'}
+                ))
+            ]), 0
+        ]
 
-        df_new = df1.set_index("Tube #", drop = False)
-        df_new.astype('str') 
-        print("df_new \n", df_new)
-        df_hit_well = df_searchedValue
-        print("df_hit_well \n", df_hit_well)
-        print("type(df_hit_well) =  ", type(df_hit_well.index))
-    else: 
-        try:
-            df_searchedValue = df1[df1["Well #"] == searchedValue]
-            df_new = df1.set_index("Well #", drop = False)
-            df_hit_well = df_new.loc[[searchedValue]]
-            print("df_hit_well \n", df_hit_well)
-            print("type(df_hit_well) =  ", type(df_hit_well.index))
-        except:
-            return ([ html.Tr([ html.Td(dcc.Textarea(
-                placeholder=' ',
-                value='An error occurred. Check if the inputs are correct. If there the error persists, please report at: enquiries@moleculardimensions.com',
-                style={'width': '50%'}))]), 0])
+    # Processing dataframe
+    searched_value = hitwell
+    try:
+        if "Tube #" in df1.columns:
+            df_searched_value = df1[df1["Tube #"] == int(searched_value)]
+        else:
+            df_searched_value = df1[df1["Well #"] == searched_value]
 
-    
-    df_hit_well = df_hit_well.replace(r'None', np.nan)
-    df_hit_well = df_hit_well.replace(r'-', np.nan)
-    df_hit_values = df_hit_well.dropna(axis='columns')
-            
-    rows = np.shape(df_hit_values)[0]
-    columns = np.shape(df_hit_values)[1]
-    concentrations = df_hit_values.filter(like='Conc').columns
+        if df_searched_value.empty:
+            raise ValueError("No matching rows found for the provided value.")
+    except Exception as e:
+        return [
+            html.Tr([
+                html.Td(dcc.Textarea(
+                    placeholder=' ',
+                    value=f'Error processing input: {str(e)}. Check the inputs.',
+                    style={'width': '50%'}
+                ))
+            ]), 0
+        ]
+
+    # Cleanup and filtering
+    df_searched_value.replace(r'None', np.nan, inplace=True)
+    df_searched_value.replace(r'-', np.nan, inplace=True)
+    df_filtered = df_searched_value.dropna(axis='columns')
+
+    # Creating the table
     kk = dash_table.DataTable(
-                                id='table_grid',
-                                data=df_hit_values.to_dict('records'), editable=True,
-                                columns=[{"name": i, "id": i} for i in df_hit_values.columns], 
-                                fixed_columns={ 'headers': True, 'data': 1}, 
-                                style_cell = {
-                                # all three widths are needed
-                                'minWidth': '180hpx', 'width': '100px', 'maxWidth': '180px',
-                                'overflow': 'hidden',
-                                'textOverflow': 'ellipsis',
-                                },style_as_list_view=True,) 
+        id='table_grid',
+        data=df_filtered.to_dict('records'),
+        editable=True,
+        columns=[{"name": i, "id": i} for i in df_filtered.columns],
+        fixed_columns={'headers': True, 'data': 1},
+        style_cell={
+            'minWidth': '180px', 'width': '100px', 'maxWidth': '180px',
+            'overflow': 'hidden', 'textOverflow': 'ellipsis',
+        },
+        style_table={
+            'maxHeight': '500px',
+            'overflowY': 'scroll',
+        },
+        style_as_list_view=True,
+    )
 
+    # Calculating new variables
+    concentrations = df_filtered.filter(like='Conc').columns
     nvars_new = len(concentrations)
 
-    salts_labels = df_hit_values.filter(like='Salt').columns.values
-    buff_labels = df_hit_values.filter(like='Buffer').columns.values
-    perci_labels = df_hit_values.filter(like='Precipitant').columns.values
-    units_labels = df_hit_values.filter(like='Unit').columns.values
-
-    reagent_name = np.concatenate([df_hit_values.iloc[0][salts_labels[:]], df_hit_values.iloc[0][buff_labels[:]], df_hit_values.iloc[0][perci_labels[:]] ])
-    reagent_name = reagent_name.tolist()
-    reagent_name_1 = reagent_name[0]
-    reagent_name_2 = reagent_name[1]
+    return [html.Tr([html.Td(kk)]), nvars_new]
 
 
-    if n_clicks > 0:
-        return ([ html.Tr([html.Td(kk)]), nvars_new])
+# @app.callback(
+#     [Output('submit_info_grid', 'children'),
+#      Output('inp_nvars_grid', 'value')], 
+#     [Input('submit-button_grid', 'n_clicks')],
+#     states)
+# def update_output_code_hitwell(n_clicks, *args):
+#     hitwell = args[-1]
+#     code_name = args[-2]
+
+
+#     code_name = code_name + "*"
+#     counter = 0
+#     file_list = []
+#     for file in os.listdir(myPath):
+#         if fnmatch.fnmatch(file, code_name):
+#             file_list.append(file)
+#     file_list.sort()
+#     print(file_list)
+#     if len(file_list) > 1:
+#         file_found = file_list[0]
+#     elif len(file_list) == 1:
+#         file_found = file_list[0]
+#     print ("The file you called is: \n", file_found)
+#     newpath = os.path.join(myPath, file_found)
+#     xls = pd.ExcelFile(newpath)
+#     df1 = pd.read_excel(xls)
+#     print("hitwell type: ", type(hitwell))
+#     searchedValue = hitwell
+#     print("searchedValue type: ", type(searchedValue))
+#     tube = df1.filter(like='Tube').columns
+#     print("tube:", tube)
+#     well = df1.filter(like='Well').columns
+
+#     if well.empty == True: 
+#         print('tube and tube number:', searchedValue)
+#         # df_searchedValue = df1[df1["Tube #"] == searchedValue]
+#         try:
+#             df_searchedValue = df1[df1["Tube #"] == int(searchedValue)]
+#             print("df_searchedValue \n", df_searchedValue)
+#         except:
+#             print("Something went wrong, try something new")
+#             df_searchedValue = df1[df1["Tube #"] == searchedValue]
+#             print("df_searchedValue \n", df_searchedValue)
+
+#         df_new = df1.set_index("Tube #", drop = False)
+#         df_new.astype('str') 
+#         print("df_new \n", df_new)
+#         df_hit_well = df_searchedValue
+#         print("df_hit_well \n", df_hit_well)
+#         print("type(df_hit_well) =  ", type(df_hit_well.index))
+#     else: 
+#         try:
+#             df_searchedValue = df1[df1["Well #"] == searchedValue]
+#             df_new = df1.set_index("Well #", drop = False)
+#             df_hit_well = df_new.loc[[searchedValue]]
+#             print("df_hit_well \n", df_hit_well)
+#             print("type(df_hit_well) =  ", type(df_hit_well.index))
+#         except:
+#             return ([ html.Tr([ html.Td(dcc.Textarea(
+#                 placeholder=' ',
+#                 value='An error occurred. Check if the inputs are correct. If there the error persists, please report at: enquiries@moleculardimensions.com',
+#                 style={'width': '50%'}))]), 0])
+
+    
+#     df_hit_well = df_hit_well.replace(r'None', np.nan)
+#     df_hit_well = df_hit_well.replace(r'-', np.nan)
+#     df_hit_values = df_hit_well.dropna(axis='columns')
+            
+#     rows = np.shape(df_hit_values)[0]
+#     columns = np.shape(df_hit_values)[1]
+#     concentrations = df_hit_values.filter(like='Conc').columns
+#     kk = dash_table.DataTable(
+#                                 id='table_grid',
+#                                 data=df_hit_values.to_dict('records'), editable=True,
+#                                 columns=[{"name": i, "id": i} for i in df_hit_values.columns], 
+#                                 fixed_columns={ 'headers': True, 'data': 1}, 
+#                                 style_cell = {
+#                                 # all three widths are needed
+#                                 'minWidth': '180hpx', 'width': '100px', 'maxWidth': '180px',
+#                                 'overflow': 'hidden',
+#                                 'textOverflow': 'ellipsis',
+#                                 },style_as_list_view=True,) 
+
+#     nvars_new = len(concentrations)
+
+#     salts_labels = df_hit_values.filter(like='Salt').columns.values
+#     buff_labels = df_hit_values.filter(like='Buffer').columns.values
+#     perci_labels = df_hit_values.filter(like='Precipitant').columns.values
+#     units_labels = df_hit_values.filter(like='Unit').columns.values
+
+#     reagent_name = np.concatenate([df_hit_values.iloc[0][salts_labels[:]], df_hit_values.iloc[0][buff_labels[:]], df_hit_values.iloc[0][perci_labels[:]] ])
+#     reagent_name = reagent_name.tolist()
+#     reagent_name_1 = reagent_name[0]
+#     reagent_name_2 = reagent_name[1]
+
+
+#     if n_clicks > 0:
+#         return ([ html.Tr([html.Td(kk)]), nvars_new])
 #------------------------------------------------------------------------------
 
 inp_nsamples = html.Tr([
@@ -370,10 +472,10 @@ states += [State('inp_hitwell_grid', 'value')]
 
 
 @app.callback(
-    dash.dependencies.Output('compute_info_grid', 'children'),
-    [dash.dependencies.Input('table_grid', 'data'),
-     dash.dependencies.Input('btn_compute_grid', 'n_clicks')
-     ], states)
+    Output('compute_info_grid', 'children'),
+    [Input('table_grid', 'data'),
+     Input('btn_compute_grid', 'n_clicks')
+    ], states)
 
 def on_compute(submit_info, n_clicks, *args):
     """Callback for clicking compute button"""
@@ -399,7 +501,7 @@ def on_compute(submit_info, n_clicks, *args):
     concentrations = df_hit_values.filter(like='Conc').columns
     var = df_hit_values[concentrations].to_numpy()
     var = var.T
-    var_float = var.astype(np.float)
+    var_float = var.astype(float)
 
     pH =  df_hit_values.filter(like='pH').columns
     pH = df_hit_values[pH].to_numpy()

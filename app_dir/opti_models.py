@@ -9,7 +9,7 @@ from __future__ import print_function
 import numpy as np
 import itertools
 import time
-import pyDOE as doe
+import pyDOE3 as doe
 
 def compute_LHS(num_samples, var_LB, var_UB):
 	'''

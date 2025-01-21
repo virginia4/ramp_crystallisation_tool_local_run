@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function, absolute_import
 from builtins import range  # pylint: disable=redefined-builtin
-import dash_table
+from dash import dash_table
 import collections
 import os 
 import fnmatch
@@ -10,10 +10,12 @@ import xlsxwriter
 from xlsxwriter.utility import xl_rowcol_to_cell
 import xlrd   
 import dash
-import dash_core_components as dcc
-import dash_html_components as html
+# import dash_core_components as dcc
+# import dash_html_components as html
+from dash import html, dcc
 from dash.dependencies import Input, Output, State
 #import dash_table_experiments as dt
+from dash import dash_table as dt
 from .common import generate_table
 import pandas as pd
 import numpy as np
@@ -152,121 +154,181 @@ states += [State('inp_hitwell_lhs', 'value')]
     [Output('submit_info_lhs', 'children'),
      Output('inp_nvars_lhs', 'value')],
     [Input('submit-button_lhs', 'n_clicks')],
-    states)
-def update_output_code_hitwell(n_clicks, *args):
-    ###
-    # arg caries the values of the inputs from the submit button and the inp_nvars_lhs
-    ###
-    hitwell = args[-1]
-    code_name = args[-2]
+    [State('inp_code_lhs', 'value'),
+     State('inp_hitwell_lhs', 'value')]
+    )
+def update_output_code_hitwell(n_clicks, code_name, hitwell):
+    if n_clicks == 0 or not code_name or not hitwell:
+        # Initial or invalid inputs
+        return (html.Tr([html.Td("Awaiting input...")]), '')
+
+    try:
+        code_name = code_name + "*"
+        file_list = [file for file in os.listdir(myPath) if fnmatch.fnmatch(file, code_name)]
+        
+        if not file_list:
+            return ([html.Tr([html.Td("No matching files found.")])], 0)
+        
+        file_list.sort()
+        file_found = file_list[0] if len(file_list) > 1 else file_list[0]
+        
+        newpath = os.path.join(myPath, file_found)
+        xls = pd.ExcelFile(newpath)
+        df1 = pd.read_excel(xls)
+        
+        # Process hit well data
+        if 'Well #' in df1.columns:
+            df_searchedValue = df1[df1["Well #"] == hitwell]
+        elif 'Tube #' in df1.columns:
+            df_searchedValue = df1[df1["Tube #"] == int(hitwell)]
+        else:
+            return ([html.Tr([html.Td("No 'Well #' or 'Tube #' column found.")])], 0)
+        
+        # Filter valid data
+        df_hit_values = df_searchedValue.dropna(axis='columns')
+        concentrations = df_hit_values.filter(like='Conc').columns
+        
+        kk = dash_table.DataTable(
+            id='table_lhs',
+            data=df_hit_values.to_dict('records'),
+            editable=True,
+            columns=[{"name": i, "id": i} for i in df_hit_values.columns],
+            fixed_columns={'headers': True, 'data': 1},
+            style_cell={
+                'minWidth': '180px',
+                'width': '100px',
+                'maxWidth': '180px',
+                'overflow': 'hidden',
+                'textOverflow': 'ellipsis',
+            },
+            style_table={
+                'maxHeight': '500px',  # Set the maximum height of the table
+                'overflowY': 'scroll',  # Enable vertical scrolling
+            },
+            style_as_list_view=True,
+        )
+        
+        nvars_new = len(concentrations)
+        return ([html.Tr([html.Td(kk)]), nvars_new])
+
+    except Exception as e:
+        # Handle unexpected errors
+        return ([html.Tr([html.Td(f"Error: {str(e)}")])], 0)
+        
+# def update_output_code_hitwell(n_clicks, *args):
+#     ###
+#     # arg caries the values of the inputs from the submit button and the inp_nvars_lhs
+#     ###
+#     hitwell = args[-1]
+#     code_name = args[-2]
     
-    ###
-    # "*" is necessary for finding the file 
-    ###
-    code_name = code_name + "*"
-    counter = 0
-    file_list = []
-    for file in os.listdir(myPath):
-        if fnmatch.fnmatch(file, code_name):
-            file_list.append(file)
+#     ###
+#     # "*" is necessary for finding the file 
+#     ###
+#     code_name = code_name + "*"
+#     counter = 0
+#     file_list = []
+#     for file in os.listdir(myPath):
+#         if fnmatch.fnmatch(file, code_name):
+#             file_list.append(file)
 
-    ###
-    # There are files that have similar names, e.g. MD1-10, MD1-10-ECO. 
-    # The following logical statements assure that the correct file is  
-    # selected. 
-    ###
-    file_list.sort()
-    print(file_list)
-    if len(file_list) > 1:
-        file_found = file_list[0]
-    elif len(file_list) == 1:
-        file_found = file_list[0]
-    # print ("The file you called is: \n", file_found)
+#     ###
+#     # There are files that have similar names, e.g. MD1-10, MD1-10-ECO. 
+#     # The following logical statements assure that the correct file is  
+#     # selected. 
+#     ###
+#     file_list.sort()
+#     print(file_list)
+#     if len(file_list) > 1:
+#         file_found = file_list[0]
+#     elif len(file_list) == 1:
+#         file_found = file_list[0]
+#     # print ("The file you called is: \n", file_found)
 
-    ###
-    # Find file and assign new path. Then read the the xlxs file in  
-    # a Dataframe. 
-    ###
-    newpath = os.path.join(myPath, file_found)
-    xls = pd.ExcelFile(newpath)
-    df1 = pd.read_excel(xls)
+#     ###
+#     # Find file and assign new path. Then read the the xlxs file in  
+#     # a Dataframe. 
+#     ###
+#     newpath = os.path.join(myPath, file_found)
+#     xls = pd.ExcelFile(newpath)
+#     df1 = pd.read_excel(xls)
 
-    ###
-    # Search in columns with labels "Tube" and "Well" for the the hit well
-    ###
-    searchedValue =  hitwell
-    tube = df1.filter(like='Tube').columns
-    well = df1.filter(like='Well').columns
+#     ###
+#     # Search in columns with labels "Tube" and "Well" for the the hit well
+#     ###
+#     searchedValue =  hitwell
+#     tube = df1.filter(like='Tube').columns
+#     well = df1.filter(like='Well').columns
 
-    ###
-    # Each file might has either well or tube, so the program has to check
-    # which is the case.
-    ###
-    if well.empty == True: 
-        print('tube and tube number:', searchedValue)
-        # df_searchedValue = df1[df1["Tube #"] == searchedValue]
-        try:
-            df_searchedValue = df1[df1["Tube #"] == int(searchedValue)]
-            # print("df_searchedValue \n", df_searchedValue)
-        except:
-            print("Something went wrong, try something new")
-            df_searchedValue = df1[df1["Tube #"] == searchedValue]
-            # print("df_searchedValue \n", df_searchedValue)
+#     ###
+#     # Each file might has either well or tube, so the program has to check
+#     # which is the case.
+#     ###
+#     if well.empty == True: 
+#         print('tube and tube number:', searchedValue)
+#         # df_searchedValue = df1[df1["Tube #"] == searchedValue]
+#         try:
+#             df_searchedValue = df1[df1["Tube #"] == int(searchedValue)]
+#             # print("df_searchedValue \n", df_searchedValue)
+#         except:
+#             print("Something went wrong, try something new")
+#             df_searchedValue = df1[df1["Tube #"] == searchedValue]
+#             # print("df_searchedValue \n", df_searchedValue)
 
-        df_new = df1.set_index("Tube #", drop = False)
-        df_new.astype('str') 
-        df_hit_well = df_searchedValue
-        # print("df_hit_well \n", df_hit_well)
-        # print("type(df_hit_well) =  ", type(df_hit_well.index))
-    else: 
-        try:
-            df_searchedValue = df1[df1["Well #"] == searchedValue]
-            df_new = df1.set_index("Well #", drop = False)
-            df_hit_well = df_new.loc[[searchedValue]]
-            # print("df_hit_well \n", df_hit_well)
-            # print("type(df_hit_well) =  ", type(df_hit_well.index))
-        except:
-            return ([ html.Tr([ html.Td(dcc.Textarea(
-                value='An error occurred. Check if the inputs are correct. If there the error persists, please report at:  enquiries@moleculardimensions.com',
-                style={'width': '50%'}))]), 0])
+#         df_new = df1.set_index("Tube #", drop = False)
+#         df_new.astype('str') 
+#         df_hit_well = df_searchedValue
+#         # print("df_hit_well \n", df_hit_well)
+#         # print("type(df_hit_well) =  ", type(df_hit_well.index))
+#     else: 
+#         try:
+#             df_searchedValue = df1[df1["Well #"] == searchedValue]
+#             df_new = df1.set_index("Well #", drop = False)
+#             df_hit_well = df_new.loc[[searchedValue]]
+#             # print("df_hit_well \n", df_hit_well)
+#             # print("type(df_hit_well) =  ", type(df_hit_well.index))
+#         except:
+#             return ([ html.Tr([ html.Td(dcc.Textarea(
+#                 value='An error occurred. Check if the inputs are correct. If there the error persists, please report at:  enquiries@moleculardimensions.com',
+#                 style={'width': '50%'}))]), 0])
 
-    ###
-    # Clean empty or nan rows
-    ###
-    df_hit_well = df_hit_well.replace(r'None', np.nan)
-    df_hit_well = df_hit_well.replace(r'-', np.nan)
-    df_hit_values = df_hit_well.dropna(axis='columns')
+#     ###
+#     # Clean empty or nan rows
+#     ###
+#     df_hit_well = df_hit_well.replace(r'None', np.nan)
+#     df_hit_well = df_hit_well.replace(r'-', np.nan)
+#     df_hit_values = df_hit_well.dropna(axis='columns')
 
-    rows = np.shape(df_hit_values)[0]
-    columns = np.shape(df_hit_values)[1]
-    ###
-    # Concentrations is an array containing the indexes of the 
-    # columns which have the "Conc" in the title.
-    ###
-    concentrations = df_hit_values.filter(like='Conc').columns
+#     rows = np.shape(df_hit_values)[0]
+#     columns = np.shape(df_hit_values)[1]
+#     ###
+#     # Concentrations is an array containing the indexes of the 
+#     # columns which have the "Conc" in the title.
+#     ###
+#     concentrations = df_hit_values.filter(like='Conc').columns
 
-    ###
-    # convert to dataframe the chosen columns. This way you can share the data with 
-    # the between callback and the also print on screen with generate_table function 
-    # later on. 
-    ###
-    kk = dash_table.DataTable(
-                                id='table_lhs',
-                                data=df_hit_values.to_dict('records'), editable=True,
-                                columns=[{"name": i, "id": i} for i in df_hit_values.columns], 
-                                # 
-                                fixed_columns={ 'headers': True, 'data': 1}, 
-                                style_cell = {
-                                # all three widths are needed
-                                'minWidth': '180hpx', 'width': '100px', 'maxWidth': '180px',
-                                'overflow': 'hidden',
-                                'textOverflow': 'ellipsis',
-                                },style_as_list_view=True,) 
+#     ###
+#     # convert to dataframe the chosen columns. This way you can share the data with 
+#     # the between callback and the also print on screen with generate_table function 
+#     # later on. 
+#     ###
+#     kk = dash_table.DataTable(
+#                                 id='table_lhs',
+#                                 data=df_hit_values.to_dict('records'), editable=True,
+#                                 columns=[{"name": i, "id": i} for i in df_hit_values.columns], 
+#                                 # 
+#                                 fixed_columns={ 'headers': True, 'data': 1}, 
+#                                 style_cell = {
+#                                 # all three widths are needed
+#                                 'minWidth': '180hpx', 'width': '100px', 'maxWidth': '180px',
+#                                 'overflow': 'hidden',
+#                                 'textOverflow': 'ellipsis',
+#                                 },style_as_list_view=True,) 
     
 
-    nvars_new = len(concentrations)
-    if n_clicks > 0:
-        return ([ html.Tr([html.Td(kk)]), nvars_new])
+#     nvars_new = len(concentrations)
+#     if n_clicks > 0:
+#         return ([ html.Tr([html.Td(kk)]), nvars_new])
 
 
 #------------------------------------------------------------------------------
@@ -336,11 +398,15 @@ states += [State('inp_hitwell_lhs', 'value')]
 
 ###############################################################################
 @app.callback(
-    dash.dependencies.Output('compute_info_lhs', 'children'),
-    [dash.dependencies.Input('table_lhs', 'data'),
-     dash.dependencies.Input('btn_compute_lhs', 'n_clicks'),
-     ], states)
-
+    Output('compute_info_lhs', 'children'),
+    [Input('table_lhs', 'data'),
+     Input('btn_compute_lhs', 'n_clicks')],
+    [State('inp_nvars_lhs', 'value'),
+     State('nsamples_x_lhs', 'value'),
+     State('nsamples_y_lhs', 'value'),
+     State('inp_code_lhs', 'value'),
+     State('inp_hitwell_lhs', 'value')], prevent_initial_call=True
+)
 def on_compute(submit_info, n_clicks, *args):
     """Callback for clicking compute button"""
     if n_clicks is None :
@@ -371,7 +437,7 @@ def on_compute(submit_info, n_clicks, *args):
     concentrations = df_hit_values.filter(like='Conc').columns
     var = df_hit_values[concentrations].to_numpy()
     var = var.T
-    var_float = var.astype(np.float)
+    var_float = var.astype(float)
 
     pH =  df_hit_values.filter(like='pH').columns
     pH = df_hit_values[pH].to_numpy()

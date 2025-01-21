@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function, absolute_import
 from builtins import range  # pylint: disable=redefined-builtin
-import dash_table
+from dash import dash_table
 import collections
 import os 
 import fnmatch
@@ -10,10 +10,12 @@ import xlsxwriter
 from xlsxwriter.utility import xl_rowcol_to_cell
 import xlrd   
 import dash
-import dash_core_components as dcc
-import dash_html_components as html
+# import dash_core_components as dcc
+# import dash_html_components as html
 from dash.dependencies import Input, Output, State
-#import dash_table_experiments as dt
+# import dash_table_experiments as dt
+from dash import html, dcc
+from dash import dash_table as dt
 from .common import generate_table
 
 
@@ -188,7 +190,7 @@ def update_output_code_hitwell(n_clicks, *args):
         if fnmatch.fnmatch(file, code_name):
             file_list.append(file)
     file_list.sort()
-    print(file_list)
+    # print(file_list)
     if len(file_list) > 1:
         file_found = file_list[0]
     elif len(file_list) == 1:
@@ -288,8 +290,10 @@ def update_output_code_hitwell(n_clicks, *args):
         return ([html.Div([html.Tr([html.Td(kk)]),html.Tr([reagent_drop])])])
 #------------------------------------------------------------------------------
 @app.callback(
-dash.dependencies.Output('second_dropdown', 'options'),
-[dash.dependencies.Input('first_dropdown', 'options'), dash.dependencies.Input('first_dropdown','value')])
+    Output('second_dropdown', 'options'),
+[   Input('first_dropdown', 'options'), 
+    Input('first_dropdown','value')
+])
 def update_dropdown(reagents,active):
     return [{'label': reagents[i]['label'], 'value': reagents[i]['label']} for i in range(len(reagents)) if reagents[i]['label'] != active]
 
@@ -357,10 +361,23 @@ states += [State('inp_hitwell_grid', 'value')]
 
 
 @app.callback(
-    dash.dependencies.Output('compute_info_grid', 'children'),
-    [dash.dependencies.Input('table_grid', 'data'),
-     dash.dependencies.Input('btn_compute_grid', 'n_clicks')
-     ], states)
+    Output('compute_info_grid', 'children'),
+    [Input('table_grid', 'data'),
+     Input('btn_compute_grid', 'n_clicks')
+    ], states, prevent_initial_call=True)
+# @app.callback(
+#     Output('compute_info_grid', 'children'),  # Output
+#     [Input('btn_compute_grid', 'n_clicks')],  # Input
+#     [
+#         State('second_dropdown', 'value'),
+#         State('first_dropdown', 'value'),
+#         State('nsamples_x_grid', 'value'),
+#         State('nsamples_y_grid', 'value'),
+#         State('inp_code_grid', 'value'),
+#         State('inp_hitwell_grid', 'value'),
+#     ],  # Multiple States
+#     prevent_initial_call=True  # Prevents the callback from firing on app load
+# )
 
 def on_compute(submit_info, n_clicks, *args):
     """Callback for clicking compute button"""
@@ -389,7 +406,7 @@ def on_compute(submit_info, n_clicks, *args):
     concentrations = df_hit_values.filter(like='Conc').columns
     var = df_hit_values[concentrations].to_numpy()
     var = var.T
-    var_float = var.astype(np.float)
+    var_float = var.astype(float)
 
     pH =  df_hit_values.filter(like='pH').columns
     pH = df_hit_values[pH].to_numpy()

@@ -4,7 +4,7 @@ Tool to optimise screening crystallisation conditions
 
 ## Use OptiScreen Tool 
 
-Try it line [here](https://ramp-mdl.appspot.com)  ---> NOT CURRENTLY AVAILABLE
+Try it line [here](https://ramp-mdl.appspot.com)  ---> CURRENTLY UNAVAILABLE
 
 ## Run OptiScreen Tool locally (for development)
 
